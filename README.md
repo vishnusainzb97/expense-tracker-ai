@@ -5,6 +5,8 @@ Modern customizable expense tracker with:
 - Monthly budget tracking and overspending detection
 - Smart rule-based AI insights (no API key required)
 - Card optimization suggestions by spending category
+- Auto-fetch card rewards from web by card name
+- Live best-card recommendation while adding transactions
 - Website/app spend trend analysis
 - Theme toggle, import/export backup, and local persistence
 - Optional OpenAI API key mode for richer suggestions
