@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Expense Tracker Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <header class="topbar">
+    <div>
+      <h1>AI Expense Tracker Pro</h1>
+      <p>Track spending, optimize cards/sites, and save smarter.</p>
+    </div>
+    <div class="topbar-actions">
+      <button id="themeToggle" class="btn ghost">Toggle Theme</button>
+      <button id="exportBtn" class="btn">Export JSON</button>
+      <label class="btn ghost import-label" for="importInput">Import JSON</label>
+      <input id="importInput" type="file" accept="application/json" />
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel controls">
+      <h2>Quick Add</h2>
+      <form id="expenseForm" class="stack">
+        <label>Type
+          <select id="type" required>
+            <option value="expense">Expense</option>
+            <option value="income">Income</option>
+          </select>
+        </label>
+        <label>Amount
+          <input id="amount" type="number" min="0" step="0.01" placeholder="0.00" required />
+        </label>
+        <label>Category
+          <select id="category" required></select>
+        </label>
+        <label>Merchant
+          <input id="merchant" type="text" placeholder="Amazon, Uber, Zomato..." required />
+        </label>
+        <label>Website / App
+          <input id="website" type="text" placeholder="amazon.in, swiggy..." />
+        </label>
+        <label>Payment Card
+          <select id="card" required></select>
+        </label>
+        <label>Date
+          <input id="date" type="date" required />
+        </label>
+        <label>Notes
+          <input id="notes" type="text" placeholder="optional" />
+        </label>
+        <button type="submit" class="btn">Add Transaction</button>
+      </form>
+
+      <h3>Budget Settings</h3>
+      <form id="budgetForm" class="stack mini">
+        <label>Monthly Budget
+          <input id="monthlyBudget" type="number" min="0" step="1" placeholder="50000" />
+        </label>
+        <button type="submit" class="btn ghost">Save Budget</button>
+      </form>
+
+      <h3>Custom Categories</h3>
+      <form id="categoryForm" class="inline-form">
+        <input id="newCategory" type="text" placeholder="Add category" />
+        <button class="btn ghost" type="submit">Add</button>
+      </form>
+
+      <h3>Cards & Rewards</h3>
+      <form id="cardForm" class="stack mini">
+        <label>Card Name
+          <input id="cardName" type="text" placeholder="HDFC Millennia" required />
+        </label>
+        <label>Reward Notes
+          <input id="cardRewards" type="text" placeholder="5% on Amazon/Flipkart" required />
+        </label>
+        <label>Best For Categories (comma-separated)
+          <input id="cardCategories" type="text" placeholder="Shopping, Groceries" />
+        </label>
+        <button type="submit" class="btn ghost">Add Card</button>
+      </form>
+    </aside>
+
+    <section class="dashboard">
+      <div class="kpis" id="kpis"></div>
+
+      <div class="grid-2">
+        <article class="panel chart-panel">
+          <h2>Monthly Spend vs Budget</h2>
+          <canvas id="spendBudgetChart"></canvas>
+        </article>
+        <article class="panel chart-panel">
+          <h2>Category Breakdown</h2>
+          <canvas id="categoryChart"></canvas>
+        </article>
+      </div>
+
+      <div class="grid-2">
+        <article class="panel">
+          <h2>AI Insights</h2>
+          <div id="insights" class="insights"></div>
+          <details>
+            <summary>Enable LLM Mode (Optional)</summary>
+            <p class="muted">If you add your API key, the app can generate richer narrative suggestions. Without key, smart local AI logic still works.</p>
+            <label>OpenAI API Key
+              <input id="openAiKey" type="password" placeholder="sk-..." />
+            </label>
+            <button id="saveApiKey" class="btn ghost">Save Key</button>
+            <button id="runLlmInsights" class="btn">Run LLM Insights</button>
+          </details>
+        </article>
+        <article class="panel">
+          <h2>Optimization Engine</h2>
+          <div id="optimizations" class="insights"></div>
+        </article>
+      </div>
+
+      <article class="panel">
+        <div class="row-between">
+          <h2>Transactions</h2>
+          <div class="row gap-sm">
+            <input id="searchInput" type="text" placeholder="Search merchant/category..." />
+            <select id="monthFilter"></select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Category</th>
+                <th>Merchant</th>
+                <th>Website</th>
+                <th>Card</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="txTable"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <template id="insightTemplate">
+    <div class="insight-item"></div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
