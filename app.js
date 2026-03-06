@@ -1,5 +1,18 @@
 const STORAGE_KEY = "ai-expense-tracker-v1";
 
+const CATEGORY_HINTS = {
+  Food: ["food", "restaurant", "dining", "swiggy", "zomato", "cafe"],
+  Groceries: ["grocery", "groceries", "supermarket", "bigbasket", "dmart", "mart"],
+  Transport: ["uber", "ola", "metro", "taxi", "transport", "fuel", "petrol", "diesel"],
+  Shopping: ["shopping", "amazon", "flipkart", "myntra", "ecommerce", "online"],
+  Bills: ["bill", "electricity", "utility", "recharge", "broadband", "gas", "water"],
+  Subscriptions: ["subscription", "netflix", "spotify", "prime", "youtube", "ott"],
+  Travel: ["flight", "hotel", "travel", "airline", "trip", "booking"],
+  Health: ["pharmacy", "health", "hospital", "medicine", "apollo"],
+  Entertainment: ["movie", "cinema", "entertainment", "game", "bookmyshow"],
+  Other: []
+};
+
 const defaultState = {
   monthlyBudget: 50000,
   categories: ["Food", "Groceries", "Transport", "Shopping", "Bills", "Subscriptions", "Travel", "Health", "Entertainment", "Other"],
@@ -36,7 +49,16 @@ const el = {
   importInput: document.getElementById("importInput"),
   openAiKey: document.getElementById("openAiKey"),
   saveApiKey: document.getElementById("saveApiKey"),
-  runLlmInsights: document.getElementById("runLlmInsights")
+  runLlmInsights: document.getElementById("runLlmInsights"),
+  autoFetchCardBtn: document.getElementById("autoFetchCardBtn"),
+  cardFetchStatus: document.getElementById("cardFetchStatus"),
+  cardName: document.getElementById("cardName"),
+  cardRewards: document.getElementById("cardRewards"),
+  cardCategories: document.getElementById("cardCategories"),
+  merchant: document.getElementById("merchant"),
+  website: document.getElementById("website"),
+  type: document.getElementById("type"),
+  bestCardNow: document.getElementById("bestCardNow")
 };
 
 init();
@@ -64,20 +86,24 @@ function bindEvents() {
   el.importInput.addEventListener("change", importData);
   el.saveApiKey.addEventListener("click", onSaveApiKey);
   el.runLlmInsights.addEventListener("click", onRunLlmInsights);
+  el.autoFetchCardBtn.addEventListener("click", onAutoFetchCardFromWeb);
+  el.category.addEventListener("change", renderLiveCardSuggestion);
+  el.merchant.addEventListener("input", renderLiveCardSuggestion);
+  el.website.addEventListener("input", renderLiveCardSuggestion);
+  el.type.addEventListener("change", renderLiveCardSuggestion);
 }
 
 function onAddTransaction(e) {
   e.preventDefault();
-  const formData = new FormData(el.expenseForm);
   const tx = {
     id: crypto.randomUUID(),
-    type: formData.get("type") || document.getElementById("type").value,
+    type: el.type.value,
     amount: Number(document.getElementById("amount").value),
-    category: document.getElementById("category").value,
-    merchant: document.getElementById("merchant").value.trim(),
-    website: document.getElementById("website").value.trim() || "-",
-    cardId: document.getElementById("card").value,
-    date: document.getElementById("date").value,
+    category: el.category.value,
+    merchant: el.merchant.value.trim(),
+    website: el.website.value.trim() || "-",
+    cardId: el.card.value,
+    date: el.date.value,
     notes: document.getElementById("notes").value.trim()
   };
 
@@ -108,15 +134,18 @@ function onAddCategory(e) {
   input.value = "";
   saveState();
   renderSelectors();
+  renderLiveCardSuggestion();
 }
 
 function onAddCard(e) {
   e.preventDefault();
-  const name = document.getElementById("cardName").value.trim();
-  const rewards = document.getElementById("cardRewards").value.trim();
-  const cats = document.getElementById("cardCategories").value
+  const name = el.cardName.value.trim();
+  const rewards = el.cardRewards.value.trim();
+  const cats = el.cardCategories.value
     .split(",")
     .map(s => s.trim())
+    .filter(Boolean)
+    .map(normalizeCategory)
     .filter(Boolean);
 
   if (!name || !rewards) return;
@@ -129,8 +158,174 @@ function onAddCard(e) {
   });
 
   el.cardForm.reset();
+  el.cardFetchStatus.textContent = "Card added.";
   saveState();
   renderSelectors();
+  renderAll();
+}
+
+async function onAutoFetchCardFromWeb() {
+  const cardName = el.cardName.value.trim();
+  if (!cardName) {
+    el.cardFetchStatus.textContent = "Enter card name first.";
+    return;
+  }
+
+  el.autoFetchCardBtn.disabled = true;
+  el.cardFetchStatus.textContent = "Fetching card rewards from web...";
+
+  try {
+    const profile = await fetchCardProfileFromWeb(cardName);
+    el.cardRewards.value = profile.rewards;
+    el.cardCategories.value = profile.bestCategories.join(", ");
+    el.cardFetchStatus.textContent = `Fetched from web: ${profile.source}. Review and click Add Card.`;
+  } catch (err) {
+    el.cardFetchStatus.textContent = `Could not auto-fetch: ${err.message}`;
+  } finally {
+    el.autoFetchCardBtn.disabled = false;
+  }
+}
+
+async function fetchCardProfileFromWeb(cardName) {
+  const query = `${cardName} credit card rewards cashback benefits India`;
+  const candidates = [
+    `https://r.jina.ai/http://www.bing.com/search?q=${encodeURIComponent(query)}`,
+    `https://r.jina.ai/http://duckduckgo.com/?q=${encodeURIComponent(query)}`
+  ];
+
+  let bestText = "";
+  let bestSource = "web search";
+
+  for (const url of candidates) {
+    const text = await fetchTextWithTimeout(url, 12000);
+    if (text && text.length > bestText.length) {
+      bestText = text;
+      bestSource = new URL(url.replace("https://r.jina.ai/http://", "https://")).hostname;
+    }
+    if (bestText.length > 2500) break;
+  }
+
+  if (!bestText) {
+    throw new Error("No readable search result returned.");
+  }
+
+  const rewards = buildRewardSummary(bestText);
+  const bestCategories = inferCategoriesFromText(bestText);
+
+  return {
+    rewards,
+    bestCategories: bestCategories.length ? bestCategories : ["Other"],
+    source: bestSource
+  };
+}
+
+async function fetchTextWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return "";
+    return await res.text();
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function buildRewardSummary(text) {
+  const compact = text.replace(/\s+/g, " ");
+  const rateMatches = [...compact.matchAll(/(\d{1,2}(?:\.\d+)?)\s*%/g)].map(m => `${m[1]}%`);
+  const uniqueRates = [...new Set(rateMatches)].slice(0, 3);
+
+  const keyBits = [];
+  if (/cashback/i.test(compact)) keyBits.push("cashback");
+  if (/reward point/i.test(compact)) keyBits.push("reward points");
+  if (/lounge/i.test(compact)) keyBits.push("lounge access");
+  if (/fuel surcharge/i.test(compact)) keyBits.push("fuel surcharge waiver");
+
+  const rates = uniqueRates.length ? `${uniqueRates.join(", ")} detected` : "web rewards detected";
+  const extras = keyBits.length ? `; perks: ${keyBits.join(", ")}` : "";
+  return `${rates}${extras}`;
+}
+
+function inferCategoriesFromText(text) {
+  const normalized = text.toLowerCase();
+  const matches = [];
+
+  for (const [category, hints] of Object.entries(CATEGORY_HINTS)) {
+    if (category === "Other") continue;
+    if (hints.some(h => normalized.includes(h.toLowerCase()))) {
+      matches.push(normalizeCategory(category));
+    }
+  }
+
+  return [...new Set(matches)].filter(Boolean).slice(0, 4);
+}
+
+function normalizeCategory(name) {
+  const map = state.categories.find(c => c.toLowerCase() === String(name).toLowerCase());
+  return map || state.categories.find(c => c.toLowerCase() === "other") || "Other";
+}
+
+function renderLiveCardSuggestion() {
+  if (el.type.value !== "expense") {
+    el.bestCardNow.textContent = "Best card suggestion is only for expense transactions.";
+    return;
+  }
+
+  const choice = pickBestCardForContext(el.category.value, el.merchant.value, el.website.value);
+  if (!choice) {
+    el.bestCardNow.textContent = "Add cards to get best-card suggestions.";
+    return;
+  }
+
+  el.bestCardNow.textContent = `Best card now: ${choice.name} (${choice.reason})`;
+}
+
+function pickBestCardForContext(category, merchant, website) {
+  if (!state.cards.length) return null;
+
+  const merchantLc = (merchant || "").toLowerCase();
+  const websiteLc = (website || "").toLowerCase();
+
+  const scored = state.cards.map(card => {
+    let score = 0;
+    const reasons = [];
+    const cardCats = card.bestCategories.map(v => v.toLowerCase());
+
+    if (cardCats.includes(String(category).toLowerCase())) {
+      score += 8;
+      reasons.push(`strong ${category} rewards`);
+    }
+
+    const rewardsLc = String(card.rewards || "").toLowerCase();
+    if (merchantLc && rewardsLc.includes(merchantLc)) {
+      score += 4;
+      reasons.push(`merchant match (${merchant})`);
+    }
+
+    if (websiteLc && websiteLc !== "-" && rewardsLc.includes(websiteLc)) {
+      score += 4;
+      reasons.push(`website match (${website})`);
+    }
+
+    const categoryHints = CATEGORY_HINTS[category] || [];
+    if (categoryHints.some(h => rewardsLc.includes(h))) {
+      score += 3;
+      reasons.push("category keywords in rewards");
+    }
+
+    if (/\d/.test(rewardsLc) && /%/.test(rewardsLc)) {
+      score += 1;
+    }
+
+    return { ...card, score, reason: reasons[0] || "general rewards" };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0];
 }
 
 function onToggleTheme() {
@@ -160,7 +355,7 @@ async function onRunLlmInsights() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${key}`
+        Authorization: `Bearer ${key}`
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
@@ -230,6 +425,7 @@ function renderAll() {
   renderTransactions();
   renderCharts();
   runRuleBasedAI();
+  renderLiveCardSuggestion();
 }
 
 function renderSelectors() {
@@ -322,7 +518,7 @@ function renderCharts() {
       labels: ["Spent", "Budget"],
       datasets: [{
         data: [thisMonthExpense, state.monthlyBudget],
-        backgroundColor: ["#0ea5e9", "#14b8a6"],
+        backgroundColor: ["#0e7a86", "#0e9f6e"],
         borderRadius: 12
       }]
     },
@@ -375,6 +571,10 @@ function runRuleBasedAI() {
     const pct = totalExpense ? Math.round((amt / totalExpense) * 100) : 0;
     if (pct >= 25) {
       insights.push(`High spend in ${cat}: ${inr(amt)} (${pct}% of this month expenses).`);
+      const best = pickBestCardForContext(cat, "", "");
+      if (best) {
+        optimizations.push(`For ${cat}, prefer ${best.name}. Why: ${best.reason}.`);
+      }
     }
   });
 
@@ -399,7 +599,11 @@ function runRuleBasedAI() {
 
   const topSite = Object.entries(siteMap).sort((a, b) => b[1] - a[1])[0];
   if (topSite && topSite[0] !== "-") {
-    optimizations.push(`Top website/app spend: ${topSite[0]} (${inr(topSite[1])}). Compare alternatives before checkout.`);
+    const bestForSite = pickBestCardForContext("Other", "", topSite[0]);
+    const line = bestForSite
+      ? `Top website/app spend: ${topSite[0]} (${inr(topSite[1])}). Best card here: ${bestForSite.name}.`
+      : `Top website/app spend: ${topSite[0]} (${inr(topSite[1])}). Compare alternatives before checkout.`;
+    optimizations.push(line);
   }
 
   const bestCardByCategory = buildCardAdvice();
@@ -424,9 +628,9 @@ function buildCardAdvice() {
     });
 
   for (const [category, amount] of Object.entries(categorySpend)) {
-    const bestCards = state.cards.filter(c => c.bestCategories.map(v => v.toLowerCase()).includes(category.toLowerCase()));
-    if (bestCards.length > 0) {
-      advice.push(`For ${category} (${inr(amount)}), use ${bestCards[0].name}. Reward logic: ${bestCards[0].rewards}.`);
+    const best = pickBestCardForContext(category, "", "");
+    if (best) {
+      advice.push(`For ${category} (${inr(amount)}), use ${best.name}. Reward logic: ${best.rewards}.`);
     }
   }
 
