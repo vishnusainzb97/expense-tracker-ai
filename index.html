@@ -51,6 +51,7 @@
         <label>Payment Card
           <select id="card" required></select>
         </label>
+        <div id="bestCardNow" class="muted card-tip">Best card suggestion will appear here.</div>
         <label>Date
           <input id="date" type="date" required />
         </label>
@@ -85,6 +86,10 @@
         <label>Best For Categories (comma-separated)
           <input id="cardCategories" type="text" placeholder="Shopping, Groceries" />
         </label>
+        <div class="card-fetch-row">
+          <button id="autoFetchCardBtn" type="button" class="btn">Auto-Fetch from Web</button>
+          <span id="cardFetchStatus" class="muted">Type card name and fetch.</span>
+        </div>
         <button type="submit" class="btn ghost">Add Card</button>
       </form>
     </aside>
