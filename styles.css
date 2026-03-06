@@ -256,6 +256,22 @@ input:focus, select:focus {
   margin-bottom: 1rem;
 }
 
+.card-fetch-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.card-tip {
+  margin-top: -0.1rem;
+  margin-bottom: 0.35rem;
+  border: 1px dashed color-mix(in srgb, var(--brand), transparent 55%);
+  border-radius: 11px;
+  padding: 0.48rem 0.58rem;
+  background: color-mix(in srgb, var(--brand), transparent 93%);
+}
+
 .dashboard {
   min-width: 0;
 }
